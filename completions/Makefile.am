@@ -117,6 +117,7 @@ bashcomp_DATA = 2to3 \
 		freebsd-update \
 		freeciv \
 		freeciv-server \
+		fscrypt \
 		function \
 		fusermount \
 		gcc \

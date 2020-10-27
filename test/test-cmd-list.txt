@@ -176,6 +176,7 @@ fold
 freebsd-update
 freeciv
 freeciv-server
+fscrypt
 function
 fusermount
 g++

@@ -1,0 +1,212 @@
+# bash completion for fscrypt                              -*- shell-script -*-
+
+# Output list of possible mount points
+_fscrypt_mountpoints()
+{
+    fscrypt status | \
+        command sed \
+            -e '/^\//!d' \
+            -e '/Yes$/!d' \
+            -e 's/ .*//'
+}
+
+# Output list of possible policy or protector IDs
+# $1: the mount point on which policies are looked for.
+# $2: the section (policy or protector) to retrieve
+_fscrypt_mountpoint_status_section()
+{
+    fscrypt status "$1" | \
+        command sed \
+            -e "/^${2^^} /",'/^$/!d' \
+            -e "s/${2^^}//" \
+            -e "s/\s.*//"
+}
+
+_fscrypt()
+{
+    local cur prev words cword split
+    local GLOBAL_OPTS="--verbose --quiet --help"
+    _init_completion -s -n : || return
+
+    case $prev in
+        --drop-caches)
+            COMPREPLY=($(compgen -W "true false" -- "${cur}"))
+            return ;;
+        --key)
+            _filedir
+            return ;;
+        --name)
+            # New value, nothing to complete
+            return ;;
+        --policy|--protector|--unlock-with)
+            local section="${prev#--}"
+            [[ $section = unlock-with ]] && section=protector
+            if [[ $cur = *:* ]]; then
+                COMPREPLY=($(printf "${cur%:*}:%s\n" \
+                    $(compgen -W "$(_fscrypt_mountpoint_status_section \
+                                    "${cur%:*}" "${section}")" \
+                      -- "${cur#*:}")))
+                __ltrim_colon_completions "$cur"
+            else
+                COMPREPLY=($(printf "%s:\n" \
+                             $(compgen -W "$(_fscrypt_mountpoints)" \
+                               -- "${cur}")))
+                compopt -o nospace
+            fi
+            return ;;
+        --source)
+            COMPREPLY=($(compgen -W "pam_passphrase custom_passphrase raw_key" \
+                         -- "${cur}"))
+            return ;;
+        --time)
+            # It's a time, hard to complete a number…
+            return ;;
+        --user)
+            COMPREPLY=($(compgen -u -- "${cur}"))
+            return ;;
+    esac
+
+    local -a positional
+    local cword cmd
+    for ((cword = 1; cword < ${#words[@]} - 1; cword++)); do
+        [[ ${words[cword - 1]} == --@(drop-caches|key|name|policy|protector|unlock-with|source|time|user) ]] \
+            && continue  # Argument of previous option
+        [[ ${words[cword]} == -* ]] && continue  # Option
+        positional+=(${words[cword]})
+    done
+
+    case ${positional[0]-} in
+        encrypt)
+            case $cur in
+                -*)
+                    COMPREPLY=($(compgen -W \
+                                 "--policy= --unlock-with= --protector=
+                                  --source= --user= --name= --key= --skip-unlock
+                                  --no-recovery ${GLOBAL_OPTS}" \
+                                 -- "${cur}"))
+                    ;;
+                *)
+                    _filedir -d
+                    ;;
+            esac
+            ;;
+        lock)
+            case $cur in
+                -*)
+                    COMPREPLY=($(compgen -W "--drop-caches= --user= --all-users ${GLOBAL_OPTS}" \
+                                 -- "$cur"))
+                    ;;
+                *)
+                    _filedir -d
+                    ;;
+            esac
+            ;;
+        metadata)
+            case ${positional[1]-} in
+                add-protector-to-policy)
+                    COMPREPLY=($(compgen -W \
+                                 "--protector= --policy= --unlock-with= --key=
+                                  ${GLOBAL_OPTS}" \
+                                 -- "${cur}"))
+                    ;;
+                change-passphrase)
+                    COMPREPLY=($(compgen -W "--protector= ${GLOBAL_OPTS}" \
+                                 -- "${cur}"))
+                    ;;
+                create)
+                    if [[ $cur = -* ]]; then
+                        COMPREPLY=($(compgen -W "${GLOBAL_OPTS}" -- "${cur}"))
+                    elif [[ ${positional[2]-} == @(protector|policy) ]]; then
+                        COMPREPLY=($(compgen -W "$(_fscrypt_mountpoints)" -- "${cur}"))
+                    else
+                        COMPREPLY=($(compgen -W "protector policy" -- "${cur}"))
+                    fi
+                    ;;
+                destroy)
+                    case $cur in
+                        -*)
+                            COMPREPLY=($(compgen -W \
+                                         "--protector= --policy= --force ${GLOBAL_OPTS}" \
+                                         -- "${cur}"))
+                                    ;;
+                        *)
+                            COMPREPLY=($(compgen -W "$(_fscrypt_mountpoints)" \
+                                         -- "${cur}"))
+                                    ;;
+                    esac
+                    ;;
+                dump)
+                    COMPREPLY=($(compgen -W \
+                                 "--protector= --policy= ${GLOBAL_OPTS}" \
+                                 -- "${cur}"))
+                    ;;
+                remove-protector-from-policy)
+                    COMPREPLY=($(compgen -W \
+                                 "--protector= --policy= --force ${GLOBAL_OPTS}" \
+                                 -- "${cur}"))
+                    ;;
+                *)
+                    COMPREPLY=($(compgen -W \
+                                 "add-protector-to-policy create change-passphrase
+                                  destroy dump remove-protector-from-policy
+                                  ${GLOBAL_OPTS}" \
+                                 -- "${cur}"))
+                     ;;
+             esac
+            ;;
+        purge)
+            case $cur in
+                -*)
+                    COMPREPLY=($(compgen -W "--drop-caches= --user= --force ${GLOBAL_OPTS}" \
+                                 -- "$cur"))
+                    ;;
+                *)
+                    COMPREPLY=($(compgen -W "$(_fscrypt_mountpoints)" -- "$cur"))
+                    ;;
+            esac
+            ;;
+        setup)
+            case $cur in
+                -*)
+                    COMPREPLY=($(compgen -W "--time= --force ${GLOBAL_OPTS}" \
+                               -- "${cur}"))
+                    ;;
+                *)
+                    COMPREPLY=($(compgen -W "$(_fscrypt_mountpoints)" -- "${cur}"))
+                    ;;
+            esac
+            ;;
+        status)
+            case $cur in
+                -*)
+                    COMPREPLY=($(compgen -W "$GLOBAL_OPTS" -- "$cur"))
+                    ;;
+                *)
+                    _filedir -d
+                    ;;
+            esac
+            ;;
+        unlock)
+            case $cur in
+                -*)
+                    COMPREPLY=($(compgen -W "--unlock-with= --user= --key= ${GLOBAL_OPTS}" \
+                                 -- "$cur"))
+                    ;;
+                *)
+                    _filedir -d
+                    ;;
+            esac
+            ;;
+        *)
+            COMPREPLY=($(compgen -W \
+                         "--help --version
+                          encrypt lock metadata purge setup status unlock" \
+                         -- "$cur"))
+            ;;
+    esac
+    [[ ${#COMPREPLY[@]} == 1 ]] && [[ ${COMPREPLY[0]} == "--"*"=" ]] \
+        && compopt -o nospace
+} &&
+    complete -F _fscrypt fscrypt
+
+# ex: filetype=sh
